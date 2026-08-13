@@ -7,12 +7,12 @@ import com.tasktracker.dto.TaskCreateRequest;
 import com.tasktracker.dto.TaskResponse;
 import com.tasktracker.exception.TaskNotFoundException;
 import com.tasktracker.exception.UserNotFoundException;
-import com.tasktracker.kafka.TaskEventProducer;
 import com.tasktracker.kafka.event.TaskAssigneeChangedEvent;
 import com.tasktracker.kafka.event.TaskCreatedEvent;
 import com.tasktracker.repository.TaskRepository;
 import com.tasktracker.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -27,7 +27,7 @@ public class TaskService {
 
     private final TaskRepository taskRepository;
     private final UserRepository userRepository;
-    private final TaskEventProducer taskEventProducer;
+    private final ApplicationEventPublisher eventPublisher;
 
     public Page<TaskResponse> getTasks(Pageable pageable) {
         return taskRepository.findAll(pageable).map(TaskResponse::from);
@@ -47,7 +47,7 @@ public class TaskService {
         task.setStatus(TaskStatus.NEW);
         task = taskRepository.save(task);
 
-        taskEventProducer.publishTaskCreated(
+        eventPublisher.publishEvent(
                 new TaskCreatedEvent(task.getId(), task.getTitle(), task.getDescription(), Instant.now()));
 
         return TaskResponse.from(task);
@@ -63,7 +63,7 @@ public class TaskService {
         task.setAssignee(assignee);
         task = taskRepository.save(task);
 
-        taskEventProducer.publishAssigneeChanged(
+        eventPublisher.publishEvent(
                 new TaskAssigneeChangedEvent(task.getId(), assignee.getId(), assignee.getName(),
                         assignee.getEmail(), Instant.now()));
 

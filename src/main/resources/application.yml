@@ -26,9 +26,18 @@ spring:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
         spring.json.add.type.headers: false
+        max.block.ms: 5000
+
+  data:
+    web:
+      pageable:
+        max-page-size: 100
 
 server:
   port: 8080
+  tomcat:
+    max-http-form-post-size: 1MB
+    max-swallow-size: 1MB
 
 springdoc:
   swagger-ui:

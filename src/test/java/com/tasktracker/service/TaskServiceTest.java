@@ -7,7 +7,6 @@ import com.tasktracker.dto.TaskCreateRequest;
 import com.tasktracker.dto.TaskResponse;
 import com.tasktracker.exception.TaskNotFoundException;
 import com.tasktracker.exception.UserNotFoundException;
-import com.tasktracker.kafka.TaskEventProducer;
 import com.tasktracker.kafka.event.TaskAssigneeChangedEvent;
 import com.tasktracker.kafka.event.TaskCreatedEvent;
 import com.tasktracker.repository.TaskRepository;
@@ -18,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.Optional;
 
@@ -25,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -37,13 +38,13 @@ class TaskServiceTest {
     private UserRepository userRepository;
 
     @Mock
-    private TaskEventProducer taskEventProducer;
+    private ApplicationEventPublisher eventPublisher;
 
     private TaskService taskService;
 
     @BeforeEach
     void setUp() {
-        taskService = new TaskService(taskRepository, userRepository, taskEventProducer);
+        taskService = new TaskService(taskRepository, userRepository, eventPublisher);
     }
 
     @Test
@@ -62,7 +63,7 @@ class TaskServiceTest {
         assertThat(response.status()).isEqualTo(TaskStatus.NEW);
 
         ArgumentCaptor<TaskCreatedEvent> eventCaptor = ArgumentCaptor.forClass(TaskCreatedEvent.class);
-        verify(taskEventProducer).publishTaskCreated(eventCaptor.capture());
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getValue().taskId()).isEqualTo(1L);
     }
 
@@ -96,7 +97,7 @@ class TaskServiceTest {
         assertThat(response.assignee().id()).isEqualTo(2L);
 
         ArgumentCaptor<TaskAssigneeChangedEvent> eventCaptor = ArgumentCaptor.forClass(TaskAssigneeChangedEvent.class);
-        verify(taskEventProducer).publishAssigneeChanged(eventCaptor.capture());
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getValue().assigneeId()).isEqualTo(2L);
     }
 
@@ -109,6 +110,8 @@ class TaskServiceTest {
 
         assertThatThrownBy(() -> taskService.assignExecutor(5L, 2L))
                 .isInstanceOf(UserNotFoundException.class);
+
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test

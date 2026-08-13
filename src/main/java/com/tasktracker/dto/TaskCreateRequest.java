@@ -9,6 +9,7 @@ public record TaskCreateRequest(
         @Size(max = 255, message = "title must be at most 255 characters")
         String title,
 
+        @Size(max = 10_000, message = "description must be at most 10000 characters")
         String description
 ) {
 }
