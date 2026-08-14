@@ -64,8 +64,7 @@ public class TaskService {
         task = taskRepository.save(task);
 
         eventPublisher.publishEvent(
-                new TaskAssigneeChangedEvent(task.getId(), assignee.getId(), assignee.getName(),
-                        assignee.getEmail(), Instant.now()));
+                new TaskAssigneeChangedEvent(task.getId(), assignee.getId(), Instant.now()));
 
         return TaskResponse.from(task);
     }

@@ -6,7 +6,10 @@ COPY src ./src
 RUN mvn -B -DskipTests package
 
 FROM eclipse-temurin:21-jre-alpine
+RUN apk add --no-cache curl \
+    && addgroup -S app && adduser -S app -G app
 WORKDIR /app
 COPY --from=build /build/target/task-tracker-service-*.jar app.jar
+USER app
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-XX:+ExitOnOutOfMemoryError", "-jar", "app.jar"]

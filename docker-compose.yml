@@ -6,10 +6,16 @@ services:
       POSTGRES_DB: tasktracker
       POSTGRES_USER: tasktracker
       POSTGRES_PASSWORD: tasktracker
+      # Consumed by docker/postgres-init/01-create-app-role.sh to provision a
+      # least-privilege runtime role, separate from the POSTGRES_USER superuser.
+      APP_DB_PASSWORD: app-runtime-dev-password
     ports:
-      - "5433:5432"
+      # Bound to loopback only — this is a backing store, not something meant
+      # to be reachable from the network the host is on.
+      - "127.0.0.1:5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tasktracker -d tasktracker"]
       interval: 5s
@@ -22,7 +28,7 @@ services:
     image: apache/kafka:3.7.0
     container_name: task-tracker-kafka
     ports:
-      - "9092:9092"
+      - "127.0.0.1:9092:9092"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -33,7 +39,10 @@ services:
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # Topics are created explicitly via NewTopic beans in KafkaTopicConfig;
+      # auto-create is disabled so a typo'd topic name fails loudly instead of
+      # silently creating a new topic.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     healthcheck:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"]
       interval: 10s
@@ -45,6 +54,7 @@ services:
   app:
     build: .
     container_name: task-tracker-app
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,11 +62,24 @@ services:
         condition: service_healthy
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/tasktracker
-      DB_USERNAME: tasktracker
-      DB_PASSWORD: tasktracker
+      # Least-privilege runtime role (DML only) provisioned by
+      # docker/postgres-init/01-create-app-role.sh; must match APP_DB_PASSWORD above.
+      DB_USERNAME: app_runtime
+      DB_PASSWORD: app-runtime-dev-password
+      # Flyway needs schema-owner rights for DDL, so it runs as the bootstrap superuser.
+      DB_MIGRATION_USERNAME: tasktracker
+      DB_MIGRATION_PASSWORD: tasktracker
       KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+      API_USERNAME: apiuser
+      API_PASSWORD: change-me-dev-password
     ports:
       - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     networks:
       - task-tracker-net
 
