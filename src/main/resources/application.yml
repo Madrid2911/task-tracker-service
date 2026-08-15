@@ -11,19 +11,15 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
-    properties:
-      hibernate:
-        format_sql: false
 
   # Flyway runs DDL and needs schema-owner rights; the app's own datasource above should be
-  # a least-privilege role (DML only). Falls back to the app's own credentials when a separate
-  # migration user isn't configured (e.g. tests, or a single-role local setup).
+  # a least-privilege role (DML only). When spring.flyway.user isn't set, Boot's Flyway
+  # autoconfiguration reuses the main datasource (url included) as-is — exactly what single-role
+  # setups (tests, simple local runs) need. docker-compose overrides SPRING_FLYWAY_USER/PASSWORD
+  # to point Flyway at the schema-owner role instead, without touching this file.
   flyway:
     enabled: true
     locations: classpath:db/migration
-    url: ${spring.datasource.url}
-    user: ${DB_MIGRATION_USERNAME:${DB_USERNAME}}
-    password: ${DB_MIGRATION_PASSWORD:${DB_PASSWORD}}
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
@@ -38,6 +34,7 @@ spring:
     web:
       pageable:
         max-page-size: 100
+        serialization-mode: via_dto
 
   lifecycle:
     timeout-per-shutdown-phase: 20s

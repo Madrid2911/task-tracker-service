@@ -5,10 +5,10 @@ services:
     environment:
       POSTGRES_DB: tasktracker
       POSTGRES_USER: tasktracker
-      POSTGRES_PASSWORD: tasktracker
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       # Consumed by docker/postgres-init/01-create-app-role.sh to provision a
       # least-privilege runtime role, separate from the POSTGRES_USER superuser.
-      APP_DB_PASSWORD: app-runtime-dev-password
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
     ports:
       # Bound to loopback only — this is a backing store, not something meant
       # to be reachable from the network the host is on.
@@ -17,7 +17,10 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tasktracker -d tasktracker"]
+      # -h forces a real TCP check. Without it, pg_isready talks to the unix socket, which the
+      # temporary server used while docker-entrypoint-initdb.d scripts run already answers on —
+      # reporting "healthy" before Postgres is actually listening for real connections.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U tasktracker -d tasktracker"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -55,6 +58,7 @@ services:
     build: .
     container_name: task-tracker-app
     restart: unless-stopped
+    stop_grace_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
@@ -65,17 +69,19 @@ services:
       # Least-privilege runtime role (DML only) provisioned by
       # docker/postgres-init/01-create-app-role.sh; must match APP_DB_PASSWORD above.
       DB_USERNAME: app_runtime
-      DB_PASSWORD: app-runtime-dev-password
-      # Flyway needs schema-owner rights for DDL, so it runs as the bootstrap superuser.
-      DB_MIGRATION_USERNAME: tasktracker
-      DB_MIGRATION_PASSWORD: tasktracker
+      DB_PASSWORD: ${APP_DB_PASSWORD}
+      # Flyway needs schema-owner rights for DDL, so it runs as the bootstrap superuser —
+      # SPRING_FLYWAY_USER/PASSWORD is Spring's own relaxed-binding env var naming for
+      # spring.flyway.user/password, no custom property indirection needed.
+      SPRING_FLYWAY_USER: tasktracker
+      SPRING_FLYWAY_PASSWORD: ${POSTGRES_PASSWORD}
       KAFKA_BOOTSTRAP_SERVERS: kafka:19092
-      API_USERNAME: apiuser
-      API_PASSWORD: change-me-dev-password
+      API_USERNAME: ${API_USERNAME}
+      API_PASSWORD: ${API_PASSWORD}
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10

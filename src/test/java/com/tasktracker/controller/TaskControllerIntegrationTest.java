@@ -94,12 +94,33 @@ class TaskControllerIntegrationTest {
         mockMvc.perform(get("/api/tasks").with(AUTH).param("page", "0").param("size", "5"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").exists())
-                .andExpect(jsonPath("$.totalElements", greaterThanOrEqualTo(0)));
+                .andExpect(jsonPath("$.page.totalElements", greaterThanOrEqualTo(0)));
+    }
+
+    @Test
+    void getTasks_cappedAtMaxPageSizeRegardlessOfRequestedSize() throws Exception {
+        TaskCreateRequest request = new TaskCreateRequest("page cap probe", null);
+        for (int i = 0; i < 105; i++) {
+            mockMvc.perform(post("/api/tasks").with(AUTH)
+                    .contentType("application/json")
+                    .content(objectMapper.writeValueAsString(request)));
+        }
+
+        mockMvc.perform(get("/api/tasks").with(AUTH).param("size", "1000"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.size").value(100))
+                .andExpect(jsonPath("$.content.length()").value(100));
     }
 
     @Test
     void getTaskById_returns404WhenMissing() throws Exception {
         mockMvc.perform(get("/api/tasks/{id}", 999_999).with(AUTH))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void unknownPath_returns404NotServerError() throws Exception {
+        mockMvc.perform(get("/api/nope").with(AUTH))
                 .andExpect(status().isNotFound());
     }
 
@@ -110,8 +131,31 @@ class TaskControllerIntegrationTest {
     }
 
     @Test
-    void swaggerUi_isReachableWithoutCredentials() throws Exception {
+    void createTask_returns401WithoutCredentials() throws Exception {
+        mockMvc.perform(post("/api/tasks")
+                        .contentType("application/json")
+                        .content("{\"title\": \"no auth\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void changeStatus_returns401WithoutCredentials() throws Exception {
+        mockMvc.perform(patch("/api/tasks/{id}/status", 1)
+                        .contentType("application/json")
+                        .content("{\"status\": \"DONE\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void openApiDocs_isReachableWithoutCredentials() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void actuatorHealth_isReachableWithoutCredentials() throws Exception {
+        mockMvc.perform(get("/actuator/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
     }
 }

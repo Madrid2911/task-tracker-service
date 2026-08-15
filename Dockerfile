@@ -6,8 +6,7 @@ COPY src ./src
 RUN mvn -B -DskipTests package
 
 FROM eclipse-temurin:21-jre-alpine
-RUN apk add --no-cache curl \
-    && addgroup -S app && adduser -S app -G app
+RUN addgroup -S app && adduser -S app -G app
 WORKDIR /app
 COPY --from=build /build/target/task-tracker-service-*.jar app.jar
 USER app
